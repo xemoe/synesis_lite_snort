@@ -1,0 +1,210 @@
+#
+# ใช้รูปแบบของ docker-compose configuration เป็น version 3
+# see: https://docs.docker.com/compose/compose-file/
+#
+version: '3' 
+
+networks:
+  #
+  # กำหนดใช้ docker networks เชื่อมต่อชื่อ elk, ซึ่งถ้าไม่พบจะมีการสร้าง network ขึ้นมาใหม่
+  # โดยค่าเริ่มต้นของ network_mode คือ `bridge`
+  #
+  # Networks to join, referencing entries under the top-level networks key.
+  # see: https://docs.docker.com/compose/compose-file/#networks
+  # see: https://docs.docker.com/compose/networking/
+  # see: https://docs.docker.com/network/
+  #
+  elk:
+    driver: bridge
+
+#
+# กำหนด driver: `local` หมายถึง
+# ให้สร้างและใช้ volumes `elasticsearch_data` บนเครื่อง docker host เอง
+# ดังตัวอย่างคำสั่ง 
+# $ docker volume create --driver local --name elasticsearch_data
+#
+# The built-in `local` driver on Linux accepts options similar to the linux mount command:
+# $ docker volume create --driver local --opt type=tmpfs --opt device=tmpfs --opt o=size=100m,uid=1000
+# Another example:
+# $ docker volume create --driver local --opt type=btrfs --opt device=/dev/sda2
+#
+# see: https://docs.docker.com/engine/reference/commandline/volume_create/#description
+# see: https://stackoverflow.com/questions/42195334/docker-compose-volumes-driver-local-meaning
+#
+volumes:
+  elasticsearch_data_1:
+    driver: local
+  elasticsearch_data_2:
+    driver: local
+  elasticsearch_data_3:
+    driver: local
+
+services:
+  es_member_1:
+    build:
+      context: docker-files/elasticsearch
+      args:
+        ELK_VERSION: 6.4.0
+    container_name: es_member_1
+    environment:
+      cluster.name: es-cluster-48
+      node.name: node-member-1
+      bootstrap.memory_lock: 'true'
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+      TZ: "Asia/Bangkok"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      elk: null
+    ports:
+      - 9200:9200
+    restart: unless-stopped
+    volumes:
+      - elasticsearch_data_1:/usr/share/elasticsearch/data:rw
+
+  es_member_2:
+    # image: docker.elastic.co/elasticsearch/elasticsearch:6.4.0
+    build:
+      context: docker-files/elasticsearch
+      args:
+        ELK_VERSION: 6.4.0
+    container_name: es_member_2
+    environment:
+      cluster.name: es-cluster-48
+      node.name: node-member-2
+      bootstrap.memory_lock: 'true'
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+      TZ: "Asia/Bangkok"
+      discovery.zen.ping.unicast.hosts: es_member_1
+      node.data: 'true'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      elk: null
+    restart: unless-stopped
+    volumes:
+      - elasticsearch_data_2:/usr/share/elasticsearch/data:rw
+
+  es_member_3:
+    # image: docker.elastic.co/elasticsearch/elasticsearch:6.4.0
+    build:
+      context: docker-files/elasticsearch
+      args:
+        ELK_VERSION: 6.4.0
+    container_name: es_member_3
+    environment:
+      cluster.name: es-cluster-48
+      node.name: node-member-3
+      bootstrap.memory_lock: 'true'
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+      TZ: "Asia/Bangkok"
+      discovery.zen.ping.unicast.hosts: es_member_1
+      node.data: 'true'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      elk: null
+    restart: unless-stopped
+    volumes:
+      - elasticsearch_data_3:/usr/share/elasticsearch/data:rw
+
+  logstash:
+    # image: docker.elastic.co/logstash/logstash-oss:6.4.0
+    build:
+      context: docker-files/logstash
+      args:
+        ELK_VERSION: 6.4.0
+    container_name: es_logstash
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+
+      #
+      # Synesis lite snort environment
+      #
+      SYNLITE_SNORT_GROK_PATTERNS_DIR: /use/share/logstash/synlite_snort/patterns
+      SYNLITE_SNORT_DICT_PATH: /usr/share/logstash/synlite_snort/dictionaries
+      SYNLITE_SNORT_TEMPLATE_PATH: /usr/share/logstash/synlite_snort/templates
+      SYNLITE_SNORT_GEOIP_DB_PATH: /usr/share/logstash/synlite_snort/geoipdbs
+      SYNLITE_SNORT_GEOIP_CACHE_SIZE: 8192
+      SYNLITE_SNORT_GEOIP_LOOKUP: 'true'
+      SYNLITE_SNORT_ASN_LOOKUP: 'true'
+      SYNLITE_SNORT_CLEANUP_SIGS: 'true'
+
+      # Name resolution option
+      SYNLITE_SNORT_RESOLVE_IP2HOST: 'false'
+      SYNLITE_SNORT_NAMESERVER: 127.0.0.1
+      SYNLITE_SNORT_DNS_HIT_CACHE_SIZE: 25000
+      SYNLITE_SNORT_DNS_HIT_CACHE_TTL: 900
+      SYNLITE_SNORT_DNS_FAILED_CACHE_SIZE: 75000
+      SYNLITE_SNORT_DNS_FAILED_CACHE_TTL: 3600
+
+      # Elasticsearch connection settings
+      SYNLITE_SNORT_ES_HOST: 127.0.0.1
+      SYNLITE_SNORT_ES_USER: elastic
+      SYNLITE_SNORT_ES_PASSWD: changeme
+
+      # Beats input
+      SYNLITE_SNORT_BEATS_HOST: 0.0.0.0
+      SYNLITE_SNORT_BEATS_PORT: 5044
+
+    depends_on:
+      - es_member_1
+    networks:
+      elk: null
+    ports:
+      - 5000:5000
+      - 5044:5044
+      - 9600:9600
+    #
+    # กำหนดให้ container ทำงานเสมอ ยกเว้น ! เมื่อ container ถูกสั่งให้หยุดการทำงาน
+    # ตัวอย่าง
+    # $  docker stop elasticsearch 
+    # แล้วทำการ reboot, จะพบว่า elasticsearch container จะมีสถานะเป็น Exited ไม่ได้ทำงานอยู่
+    # แต่ถ้าทำการ reboot ในขณะที่ elasticsearch container มีสถานะ Running อยู่
+    # หลังจาก reboot, ระบบจะทำการ start elasticsearch container ให้โดยอัตโนมัติ
+    #
+    # ซึ่งจะมีความแตกต่างจาก restart-policy: always ที่จะทำการ start container ให้ทุกครั้ง 
+    # ไม่ว่าก่อนหน้านั้นสถานะของ container จะเป็น Running หรือ Exited ก็ตาม
+    # 
+    # unless-stopped: Restart the container unless it is explicitly stopped or Docker itself is stopped or restarted.
+    # see: https://docs.docker.com/config/containers/start-containers-automatically/
+    # 
+    # Only stop when Docker is stopped
+    # The unless-stopped restart policy behaves the same as always with one exception.
+    # When a container is stopped and the server is 
+    # rebooted or the Docker service is restarted, the container will not be restarted.
+    # see: https://blog.codeship.com/ensuring-containers-are-always-running-with-dockers-restart-policy/
+    #
+    restart: unless-stopped
+    volumes:
+      - ./logstash/synlite_snort:/usr/share/logstash/synlite_snort:ro
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana-oss:6.4.0
+    container_name: es_kibana
+    depends_on:
+      - es_member_1
+    environment:
+      ELASTICSEARCH_PASSWORD: changeme
+      ELASTICSEARCH_URL: http://es_member_1:9200
+      ELASTICSEARCH_USERNAME: elastic
+    networks:
+      elk: null
+    ports:
+      - 5601:5601
+    restart: unless-stopped
