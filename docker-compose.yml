@@ -52,6 +52,15 @@ services:
       bootstrap.memory_lock: 'true'
       ES_JAVA_OPTS: "-Xmx256m -Xms256m"
       TZ: "Asia/Bangkok"
+
+      #
+      # X-Pack setup
+      #
+      xpack.security.enabled: 'false'
+      xpack.monitoring.enabled: 'true'
+      xpack.graph.enabled: 'true'
+      xpack.watcher.enabled: 'true'
+
     ulimits:
       memlock:
         soft: -1
@@ -82,6 +91,15 @@ services:
       TZ: "Asia/Bangkok"
       discovery.zen.ping.unicast.hosts: es_member_1
       node.data: 'true'
+
+      #
+      # X-Pack setup
+      #
+      xpack.security.enabled: 'false'
+      xpack.monitoring.enabled: 'true'
+      xpack.graph.enabled: 'true'
+      xpack.watcher.enabled: 'true'
+
     ulimits:
       memlock:
         soft: -1
@@ -110,6 +128,15 @@ services:
       TZ: "Asia/Bangkok"
       discovery.zen.ping.unicast.hosts: es_member_1
       node.data: 'true'
+
+      #
+      # X-Pack setup
+      #
+      xpack.security.enabled: 'false'
+      xpack.monitoring.enabled: 'true'
+      xpack.graph.enabled: 'true'
+      xpack.watcher.enabled: 'true'
+
     ulimits:
       memlock:
         soft: -1
@@ -123,7 +150,7 @@ services:
     volumes:
       - elasticsearch_data_3:/usr/share/elasticsearch/data:rw
 
-  logstash:
+  es_logstash:
     # image: docker.elastic.co/logstash/logstash-oss:6.4.0
     build:
       context: docker-files/logstash
@@ -132,6 +159,11 @@ services:
     container_name: es_logstash
     environment:
       LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+
+      #
+      # Disabled X-Pack
+      #
+      XPACK_MONITORING_ENABLED: 'false'
 
       #
       # Synesis lite snort environment
@@ -154,7 +186,7 @@ services:
       SYNLITE_SNORT_DNS_FAILED_CACHE_TTL: 3600
 
       # Elasticsearch connection settings
-      SYNLITE_SNORT_ES_HOST: 127.0.0.1
+      SYNLITE_SNORT_ES_HOST: es_member_1
       SYNLITE_SNORT_ES_USER: elastic
       SYNLITE_SNORT_ES_PASSWD: changeme
 
@@ -194,17 +226,24 @@ services:
     volumes:
       - ./logstash/synlite_snort:/usr/share/logstash/synlite_snort:ro
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana-oss:6.4.0
+  es_kibana:
+    image: docker.elastic.co/kibana/kibana:6.4.0
     container_name: es_kibana
     depends_on:
       - es_member_1
     environment:
+      ELASTICSEARCH_USERNAME: elastic
       ELASTICSEARCH_PASSWORD: changeme
       ELASTICSEARCH_URL: http://es_member_1:9200
-      ELASTICSEARCH_USERNAME: elastic
+
+      #
+      # X-Pack setup
+      #
+      xpack.monitoring.ui.container.elasticsearch.enabled: 'true'
+
     networks:
       elk: null
     ports:
       - 5601:5601
     restart: unless-stopped
+
